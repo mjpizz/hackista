@@ -9,12 +9,15 @@
 import os, os.path, sys, urllib2, requests, tempfile, zipfile, shutil, gzip, tarfile, sysconfig
 
 # Store all data in the local hackista directory.
-MODULES_DIR = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'hackista')
+HOME_DIR = os.environ["HOME"] or os.path.dirname(__file__)
+MODULES_DIR = os.path.join(os.path.abspath(HOME_DIR), 'hackista')
 TMP_DIR = os.path.join(MODULES_DIR, '.tmp')
-print "* Using pipista modules directory %s" % MODULES_DIR
 
 # Workaround empty "userbase" config var in some versions of Pythonista.
-sysconfig._CONFIG_VARS["userbase"] = sysconfig._CONFIG_VARS.get("userbase", MODULES_DIR)
+try:
+    sysconfig.get_config_var('userbase')
+except AttributeError:
+    sysconfig._CONFIG_VARS['userbase'] = sysconfig._CONFIG_VARS.get('userbase', MODULES_DIR)
 
 
 class PyPiError(Exception):
@@ -399,15 +402,20 @@ def _py_build(path=None):
     sys.stderr = tempfile.TemporaryFile()
     os.chdir(path)
     try:
+        # Make it possible to import local modules in the build directory.
+        sys.path.insert(0, path)
         result = distutils.core.run_setup('setup.py', ['build_py', '--force'])
     except Exception:
         result = None
     finally:
         sys.stderr = old_stderr
         sys.stdout = old_stdout
+        # Clean up import paths.
+        sys.path.pop(0)
     return result
 
 def pypi_install(pkg_name, pkg_ver='', print_progress=True):
+    print "* Using pipista modules directory %s" % MODULES_DIR
     ## EXPERIMENTAL - not guaranteed to work! ##
     # Remeber where we were
     cwd = os.getcwd()
@@ -466,6 +474,8 @@ def pypi_install(pkg_name, pkg_ver='', print_progress=True):
                 print "* Finished installation"
             else:
                 print "* ERROR: could not find any build products to install"
+        else:
+            print "* ERROR: failed to build"
         _reset_and_enter_tmp(cwd)
         return True
     else:
